@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: patchpulse-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm run render:build
+    startCommand: npm run render:start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: AI_MODE
+        value: mock
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small

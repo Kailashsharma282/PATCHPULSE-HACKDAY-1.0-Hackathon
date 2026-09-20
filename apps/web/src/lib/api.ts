@@ -1,4 +1,8 @@
-const BASE_URL = '/api';
+const RAW_API_URL = import.meta.env.VITE_API_URL || '';
+export const API_BASE_URL = RAW_API_URL
+  ? (RAW_API_URL.endsWith('/api') ? RAW_API_URL : `${RAW_API_URL.replace(/\/$/, '')}/api`)
+  : '/api';
+const BASE_URL = API_BASE_URL;
 
 export interface ApiClientResponse<T = any> {
   success: boolean;

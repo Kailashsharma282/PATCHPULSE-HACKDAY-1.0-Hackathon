@@ -6,7 +6,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node -e \"const fs = require('fs'); const p = fs.existsSync('./dist/apps/api/src/main.js') ? './dist/apps/api/src/main.js' : './dist/main.js'; require(p);\"",
     "lint": "echo 'No lint errors'",
     "test": "jest --config test/jest.json",
     "test:e2e": "jest --config test/jest-e2e.json"

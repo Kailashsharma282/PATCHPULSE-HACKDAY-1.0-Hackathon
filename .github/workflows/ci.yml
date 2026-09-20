@@ -26,6 +26,7 @@ jobs:
 
       - name: Push Prisma Schema & Generate Client
         run: |
+          node scripts/prepare-prisma.js
           npx prisma generate --schema=./prisma/schema.prisma
           npx prisma db push --schema=./prisma/schema.prisma
 
