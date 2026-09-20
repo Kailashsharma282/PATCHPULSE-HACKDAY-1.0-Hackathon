@@ -18,7 +18,7 @@
     "build:web": "npm --workspace=packages/shared run build && npm --workspace=apps/web run build",
     "start:api": "npm --workspace=apps/api run start:prod",
     "start:web": "npm --workspace=apps/web run preview",
-    "render:build": "node scripts/prepare-prisma.js && npx prisma generate --schema=./prisma/schema.prisma && npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss && npx ts-node --transpile-only ./prisma/seed.ts && npm --workspace=packages/shared run build && npm --workspace=apps/api run build",
+    "render:build": "node scripts/prepare-prisma.js && prisma generate --schema=./prisma/schema.prisma && prisma db push --schema=./prisma/schema.prisma --accept-data-loss && ts-node --transpile-only ./prisma/seed.ts && npm --workspace=packages/shared run build && npm --workspace=apps/api run build",
     "render:start": "npm --workspace=apps/api run start:prod",
     "test": "npm --workspace=apps/api run test",
     "test:e2e": "npm --workspace=apps/api run test:e2e",
@@ -28,13 +28,11 @@
     "db:push": "npm run db:prep && prisma db push --schema=./prisma/schema.prisma",
     "db:seed": "ts-node --transpile-only ./prisma/seed.ts"
   },
-  "devDependencies": {
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
     "concurrently": "^9.1.2",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.22.0"
   }
 }
