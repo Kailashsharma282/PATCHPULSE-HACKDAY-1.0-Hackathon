@@ -18,7 +18,7 @@
     "build:web": "npm --workspace=packages/shared run build && npm --workspace=apps/web run build",
     "start:api": "npm --workspace=apps/api run start:prod",
     "start:web": "npm --workspace=apps/web run preview",
-    "render:build": "node scripts/prepare-prisma.js && prisma generate --schema=./prisma/schema.prisma && prisma db push --schema=./prisma/schema.prisma --accept-data-loss && ts-node --transpile-only ./prisma/seed.ts && npm --workspace=packages/shared run build && npm --workspace=apps/api run build",
+    "render:build": "npm install --include=dev && node scripts/prepare-prisma.js && (node ./node_modules/prisma/build/index.js generate --schema=./prisma/schema.prisma || npx prisma generate --schema=./prisma/schema.prisma) && (node ./node_modules/prisma/build/index.js db push --schema=./prisma/schema.prisma --accept-data-loss || npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss) && (node ./node_modules/ts-node/dist/bin.js --transpile-only ./prisma/seed.ts || npx ts-node --transpile-only ./prisma/seed.ts) && npm --workspace=packages/shared run build && npm --workspace=apps/api run build",
     "render:start": "npm --workspace=apps/api run start:prod",
     "test": "npm --workspace=apps/api run test",
     "test:e2e": "npm --workspace=apps/api run test:e2e",
