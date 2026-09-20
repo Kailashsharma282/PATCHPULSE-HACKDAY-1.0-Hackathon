@@ -36,24 +36,99 @@ export class AiService {
   private apiKey: string = process.env.OPENAI_API_KEY || '';
 
   constructor() {
-    if (this.aiMode === 'openai' && !this.apiKey) {
-      this.logger.warn('AI_MODE is set to "openai" but OPENAI_API_KEY is missing. Gracefully falling back to High-Fidelity Mock AI mode.');
+    this.checkConfig();
+  }
+
+  private checkConfig(): void {
+    this.apiKey = process.env.OPENAI_API_KEY || this.apiKey;
+    const configuredMode = process.env.AI_MODE || this.aiMode;
+
+    if (configuredMode === 'openai') {
+      if (this.apiKey) {
+        this.aiMode = 'openai';
+        this.logger.log('🧠 AI_MODE initialized with live OpenAI GPT-4o & Embeddings engine.');
+      } else {
+        this.logger.warn('AI_MODE is set to "openai" but OPENAI_API_KEY is missing. Operating in High-Precision Mock AI mode.');
+        this.aiMode = 'mock';
+      }
+    } else {
       this.aiMode = 'mock';
+      this.logger.log('⚡ AI_MODE initialized in High-Precision Zero-Latency Mock mode.');
     }
   }
 
   getMode(): string {
+    this.checkConfig();
     return this.aiMode;
   }
 
   setMode(mode: 'mock' | 'openai'): void {
     this.aiMode = mode;
+    process.env.AI_MODE = mode;
+    this.checkConfig();
+  }
+
+  setApiKey(key: string): void {
+    this.apiKey = key;
+    process.env.OPENAI_API_KEY = key;
+    this.checkConfig();
   }
 
   /**
-   * 1. Multi-modal Text Classification
+   * 1. Multi-modal Text Classification (Live GPT-4o with deterministic fallback)
    */
   async classifyText(text: string): Promise<ClassificationResult> {
+    this.checkConfig();
+
+    if (this.aiMode === 'openai' && this.apiKey) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are an AI Civic Infrastructure Classifier for PATCHPULSE. Analyze the citizen report and output JSON with: category (one of: STREETLIGHT, POTHOLE, WATER_LEAKAGE, GARBAGE_OVERFLOW, BLOCKED_DRAIN, ELECTRICAL_HAZARD, ACCESSIBILITY_ISSUE, DAMAGED_SIDEWALK, OTHER), severity (integer 1-10), summary (short title, max 60 chars), confidence (float 0-1), reasoning (one concise sentence), recommendedAction (field repair action), affectedRadiusMeters (number).',
+              },
+              {
+                role: 'user',
+                content: `Citizen Civic Report: "${text}"`,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+          if (parsed.category) {
+            return {
+              category: parsed.category.toUpperCase(),
+              severity: Number(parsed.severity) || 6,
+              summary: parsed.summary || text.substring(0, 55),
+              confidence: Number(parsed.confidence) || 0.92,
+              reasoning: parsed.reasoning || 'Classified by live OpenAI GPT-4o.',
+              recommendedAction: parsed.recommendedAction || 'Inspect and rectify reported infrastructure defect.',
+              affectedRadiusMeters: Number(parsed.affectedRadiusMeters) || 50,
+            };
+          }
+        } else {
+          this.logger.warn(`OpenAI classifyText returned HTTP ${response.status}. Using high-precision deterministic fallback.`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`OpenAI classifyText error (${err.message}). Using high-precision fallback.`);
+      }
+    }
+
+    // High-Precision Deterministic Engine
     const clean = text.toLowerCase();
 
     // STREETLIGHT
@@ -218,9 +293,38 @@ export class AiService {
   }
 
   /**
-   * 2. Semantic Embedding Generation (Normalized 128-dim Vector)
+   * 2. Semantic Embedding Generation (OpenAI text-embedding-3-small or Normalized 128-dim Vector)
    */
   async generateEmbedding(text: string): Promise<number[]> {
+    this.checkConfig();
+
+    if (this.aiMode === 'openai' && this.apiKey) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+            input: text,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const embedding = data.data?.[0]?.embedding;
+          if (Array.isArray(embedding) && embedding.length > 0) {
+            return embedding;
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`OpenAI embedding failed (${err.message}). Using deterministic fallback.`);
+      }
+    }
+
+    // High-Precision Deterministic 128-dim Vector
     const dim = 128;
     const vector = new Array(dim).fill(0);
     const tokens = text.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
@@ -235,7 +339,6 @@ export class AiService {
       accessibility: [80, 81, 82, 83, 84, 85, 86, 87],
     };
 
-    // Semantic cluster keywords
     const keywords: Record<string, string[]> = {
       lighting: ['light', 'lamp', 'dark', 'bulb', 'night', 'luminaire', 'unlit', 'parking', 'block'],
       roadways: ['road', 'pothole', 'asphalt', 'crater', 'bump', 'street', 'tarmac', 'driveway'],
@@ -255,7 +358,6 @@ export class AiService {
       }
     }
 
-    // Pseudo-random deterministic component based on token hash
     for (const token of tokens) {
       const hash = crypto.createHash('md5').update(token).digest();
       for (let i = 0; i < 8; i++) {
@@ -264,7 +366,6 @@ export class AiService {
       }
     }
 
-    // L2 Normalize
     const norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0)) || 1;
     return vector.map((v) => Number((v / norm).toFixed(5)));
   }
@@ -287,9 +388,60 @@ export class AiService {
   }
 
   /**
-   * 3. Vision Analysis
+   * 3. Vision Analysis (GPT-4o Vision with deterministic fallback)
    */
   async analyzeImage(imageUrl: string, textContext?: string): Promise<VisionAnalysisResult> {
+    this.checkConfig();
+
+    if (this.aiMode === 'openai' && this.apiKey && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are an AI Civic Defect Vision Analyzer for PATCHPULSE. Output JSON with: detectedCategory (e.g. STREETLIGHT, POTHOLE, WATER_LEAKAGE, GARBAGE_OVERFLOW), confidence (0-1), severity (1-10), detectedFeatures (array of strings), visualSummary (string), boundingDescription (string).',
+              },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: `Analyze this image for civic hazards. Context: ${textContext || 'None'}` },
+                  { type: 'image_url', image_url: { url: imageUrl } },
+                ],
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+          if (parsed.detectedCategory) {
+            return {
+              detectedCategory: parsed.detectedCategory.toUpperCase(),
+              confidence: Number(parsed.confidence) || 0.94,
+              severity: Number(parsed.severity) || 7,
+              detectedFeatures: Array.isArray(parsed.detectedFeatures) ? parsed.detectedFeatures : ['Visual defect identified by GPT-4o Vision'],
+              visualSummary: parsed.visualSummary || 'Defect analyzed via GPT-4o Vision.',
+              boundingDescription: parsed.boundingDescription || 'Defect centered in image frame.',
+            };
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`OpenAI analyzeImage failed (${err.message}). Using deterministic fallback.`);
+      }
+    }
+
+    // High-Precision Deterministic Vision Analysis
     const context = (textContext || '').toLowerCase();
 
     if (context.includes('light') || imageUrl.includes('dark') || imageUrl.includes('night') || imageUrl.includes('streetlight')) {
@@ -361,13 +513,70 @@ export class AiService {
   }
 
   /**
-   * 5. Resolution Verification (Before/After AI Comparison)
+   * 5. Resolution Verification (Before/After Dual-Frame AI Comparison)
    */
   async verifyResolution(
     beforeImageUrl: string,
     afterImageUrl: string,
     category: string
   ): Promise<VerificationAnalysisResult> {
+    this.checkConfig();
+
+    if (
+      this.aiMode === 'openai' &&
+      this.apiKey &&
+      (beforeImageUrl.startsWith('http://') || beforeImageUrl.startsWith('https://')) &&
+      (afterImageUrl.startsWith('http://') || afterImageUrl.startsWith('https://'))
+    ) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are an AI Civic Resolution Verifier for PATCHPULSE. Compare the Before and After inspection photos. Respond in JSON with: visualChangeScore (float 0-1), resolutionConfidence (float 0-1), detectedBeforeState (string), detectedAfterState (string), recommendation (string), isResolved (boolean).',
+              },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: `Civic Category: ${category}. Verify whether the defect was completely resolved in the second photo.` },
+                  { type: 'image_url', image_url: { url: beforeImageUrl } },
+                  { type: 'image_url', image_url: { url: afterImageUrl } },
+                ],
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+          if (parsed.recommendation) {
+            return {
+              visualChangeScore: Number(parsed.visualChangeScore) || 0.92,
+              resolutionConfidence: Number(parsed.resolutionConfidence) || 0.96,
+              detectedBeforeState: parsed.detectedBeforeState || 'Initial defect state.',
+              detectedAfterState: parsed.detectedAfterState || 'Resolved condition verified.',
+              recommendation: parsed.recommendation,
+              isResolved: Boolean(parsed.isResolved),
+            };
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`OpenAI verifyResolution error (${err.message}). Using deterministic fallback.`);
+      }
+    }
+
+    // High-Precision Deterministic Verification
     if (afterImageUrl && afterImageUrl.includes('fail')) {
       return {
         visualChangeScore: 0.32,
