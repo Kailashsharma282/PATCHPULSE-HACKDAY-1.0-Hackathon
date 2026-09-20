@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#0F766E" />
+    </linearGradient>
+    <linearGradient id="pinGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#14B8A6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Location Pin Outline -->
+  <path
+    d="M50 12C32.327 12 18 26.327 18 44C18 64 45 86 50 88C55 86 82 64 82 44C82 26.327 67.673 12 50 12Z"
+    fill="#111726"
+    stroke="url(#pinGradient)"
+    stroke-width="4"
+    stroke-linejoin="round"
+  />
+
+  <!-- Internal Pulse Waveform -->
+  <path
+    d="M26 44H36L42 32L48 56L54 38L60 48L64 44H74"
+    stroke="#2DD4BF"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#glow)"
+  />
+
+  <!-- Core Pulse Center Dot -->
+  <circle cx="50" cy="44" r="3" fill="#FFFFFF" />
+</svg>

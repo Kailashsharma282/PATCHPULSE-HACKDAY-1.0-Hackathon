@@ -1,0 +1,285 @@
+// Prisma schema for PATCHPULSE — AI Civic Intelligence & Verification Platform
+// Supports PostgreSQL (production) and SQLite (zero-config standalone local/test)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Can be switched to "postgresql" via DATABASE_URL
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String     @id @default(uuid())
+  name        String
+  code        String     @unique
+  type        String     @default("CAMPUS") // CAMPUS, MUNICIPAL, ENTERPRISE
+  settings    String?    // JSON string
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  users       User[]
+  locations   Location[]
+  issues      Issue[]
+}
+
+model User {
+  id             String        @id @default(uuid())
+  email          String        @unique
+  passwordHash   String
+  name           String
+  role           String        @default("CITIZEN") // CITIZEN, OPERATOR, ADMIN
+  avatar         String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  reports        Report[]
+  workOrders     WorkOrder[]   @relation("AssignedWorkOrders")
+  verifications  Verification[] @relation("UserVerifications")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Location {
+  id             String        @id @default(uuid())
+  name           String        // e.g., "Block C Parking Area"
+  zone           String        // e.g., "NORTH_CAMPUS", "HOSTEL_ZONE"
+  latitude       Float
+  longitude      Float
+  radiusMeters   Float         @default(100.0)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  issues         Issue[]
+
+  @@index([latitude, longitude])
+  @@index([zone])
+}
+
+model IssueCategory {
+  id              String   @id @default(uuid())
+  code            String   @unique // STREETLIGHT, POTHOLE, etc.
+  name            String
+  icon            String   @default("AlertTriangle")
+  description     String?
+  defaultSeverity Int      @default(5)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Report {
+  id            String        @id @default(uuid())
+  userId        String?
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  issueId       String?
+  issue         Issue?        @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  description   String
+  mediaUrl      String?
+  voiceUrl      String?
+  transcription String?
+  latitude      Float?
+  longitude     Float?
+  status        String        @default("PENDING") // PENDING, CLUSTERED, REJECTED
+  aiCategory    String?
+  aiConfidence  Float?
+  embedding     String?       // JSON array string of float vector
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  signals       Signal[]
+  issueReports  IssueReport[]
+
+  @@index([issueId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Signal {
+  id          String        @id @default(uuid())
+  reportId    String?
+  report      Report?       @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  issueId     String?
+  issue       Issue?        @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  type        String        // PHOTO, TEXT, VOICE, LOCATION, TIME, CONFIRMATION, HISTORICAL, SYSTEM
+  source      String        // e.g. "MOBILE_APP", "CAMPUS_VOICE_LINE", "HISTORICAL_LOG"
+  content     String
+  confidence  Float         @default(0.9)
+  metadata    String?       // JSON string
+  timestamp   DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+
+  issueSignals IssueSignal[]
+
+  @@index([issueId])
+  @@index([type])
+  @@index([timestamp])
+}
+
+model Issue {
+  id                 String        @id // e.g. "P-024" or custom ID
+  canonicalCategory  String        // STREETLIGHT, POTHOLE, etc.
+  canonicalSummary   String
+  locationName       String
+  latitude           Float
+  longitude          Float
+  locationId         String?
+  location           Location?     @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  organizationId     String?
+  organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status             String        @default("DETECTED") // DETECTED, CORROBORATING, PRIORITIZED, ASSIGNED, IN_PROGRESS, RESOLVED_PENDING_VERIFICATION, VERIFIED_RESOLVED, REOPENED, CLOSED
+  confidence         Float         @default(0.5) // 0-1
+  severity           Int           @default(5)   // 1-10
+  priorityScore      Float         @default(50.0)// 0-100
+  priorityBand       String        @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  priorityReasoning  String?       // JSON string of explainable breakdown
+  affectedRadius     Float         @default(50.0) // meters
+  persistenceScore   Float         @default(0.0)
+  impactScore        Float         @default(0.0)
+  vulnerabilityScore Float         @default(0.0)
+  urgencyScore       Float         @default(0.0)
+  signalCount        Int           @default(1)
+  reportCount        Int           @default(1)
+  firstDetectedAt    DateTime      @default(now())
+  lastDetectedAt     DateTime      @default(now())
+  isDemoRecord       Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  reports            Report[]
+  signals            Signal[]
+  issueReports       IssueReport[]
+  issueSignals       IssueSignal[]
+  workOrders         WorkOrder[]
+  verifications      Verification[]
+
+  @@index([status])
+  @@index([priorityScore])
+  @@index([canonicalCategory])
+  @@index([latitude, longitude])
+  @@index([createdAt])
+}
+
+model IssueReport {
+  id        String   @id @default(uuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  reportId  String
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  weight    Float    @default(1.0)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, reportId])
+  @@index([issueId])
+  @@index([reportId])
+}
+
+model IssueSignal {
+  id        String   @id @default(uuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  signalId  String
+  signal    Signal   @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  relevance Float    @default(1.0)
+  createdAt DateTime @default(now())
+
+  @@unique([issueId, signalId])
+  @@index([issueId])
+  @@index([signalId])
+}
+
+model WorkOrder {
+  id                 String         @id // e.g. "PX-0192"
+  issueId            String
+  issue              Issue          @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  summary            String
+  priority           String         // LOW, MEDIUM, HIGH, CRITICAL
+  recommendedAction  String
+  requiredTeam       String         // e.g. "Electrical Maintenance Unit 2"
+  suggestedEquipment String?        // e.g. "Boom lift, 150W LED Luminaire, Multimeter"
+  deadline           DateTime?
+  status             String         @default("OPEN") // OPEN, ASSIGNED, IN_PROGRESS, COMPLETED, VERIFICATION_PENDING, VERIFIED, REOPENED, CLOSED
+  assignedToUserId   String?
+  assignedToUser     User?          @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  completedAt        DateTime?
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  verifications      Verification[]
+
+  @@index([issueId])
+  @@index([status])
+  @@index([assignedToUserId])
+}
+
+model Verification {
+  id                   String     @id @default(uuid())
+  issueId              String
+  issue                Issue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  workOrderId          String?
+  workOrder            WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  beforeImageUrl       String
+  afterImageUrl        String
+  visualChangeScore    Float      @default(0.0) // 0-1 (e.g. 0.94)
+  resolutionConfidence Float      @default(0.0) // 0-1 (e.g. 0.97)
+  detectedBeforeState  String     // e.g. "Non-functioning luminaire, darkness in coverage zone"
+  detectedAfterState   String     // e.g. "Fully illuminated 150W fixture, clear coverage"
+  recommendation       String     // e.g. "VERIFIED: Defect rectified"
+  status               String     @default("VERIFIED_RESOLVED") // VERIFIED_RESOLVED, REOPENED_FOR_REVIEW
+  verifiedByUserId     String?
+  verifiedByUser       User?      @relation("UserVerifications", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  verifiedAt           DateTime   @default(now())
+  createdAt            DateTime   @default(now())
+
+  @@index([issueId])
+  @@index([workOrderId])
+  @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, SUCCESS, ALERT
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String   // e.g. "CREATE_ISSUE", "ASSIGN_WORK_ORDER", "VERIFY_RESOLUTION"
+  entity    String   // e.g. "Issue", "WorkOrder", "Verification"
+  entityId  String
+  metadata  String?  // JSON string
+  timestamp DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([timestamp])
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   // JSON string
+  description String?
+  updatedAt   DateTime @updatedAt
+}

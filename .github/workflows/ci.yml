@@ -1,0 +1,48 @@
+name: PATCHPULSE CI Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    name: Build, Lint & Automated Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Push Prisma Schema & Generate Client
+        run: |
+          npx prisma generate --schema=./prisma/schema.prisma
+          npx prisma db push --schema=./prisma/schema.prisma
+
+      - name: Seed Database with Demo Incidents
+        run: npx ts-node --transpile-only ./prisma/seed.ts
+
+      - name: Build Shared Package
+        run: npm --workspace=packages/shared run build
+
+      - name: Build Backend Application
+        run: npm --workspace=apps/api run build
+
+      - name: Build Frontend Application
+        run: npm --workspace=apps/web run build
+
+      - name: Run Backend Unit & Integration Tests
+        run: npm --workspace=apps/api run test
+
+      - name: Run Complete E2E Lifecycle Pipeline Test
+        run: npx jest --config apps/api/test/jest-e2e.json apps/api/test/e2e-pipeline.spec.ts
